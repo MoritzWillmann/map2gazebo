@@ -1,18 +1,21 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import cv2
 import numpy as np
 import trimesh
 from matplotlib.tri import Triangulation
-
-import rospy
+import sys
+import rclpy
 from nav_msgs.msg import OccupancyGrid
 
 class MapConverter(object):
-    def __init__(self, map_topic, threshold=1, height=2.0):
-        self.test_map_pub = rospy.Publisher(
-                "test_map", OccupancyGrid, latch=True, queue_size=1)
-        rospy.Subscriber(map_topic, OccupancyGrid, self.map_callback)
+    def __init__(self, node, map_topic, threshold=1, height=2.0):
+        #self.test_map_pub = rospy.Publisher(
+        #        "test_map", OccupancyGrid, latch=True, queue_size=1)
+        self.node = node
+        self.test_map_pub = self.node.create_publisher(OccupancyGrid, "test_map", 1)
+        #rospy.Subscriber(map_topic, OccupancyGrid, self.map_callback)
+        sub = self.node.create_subscription(OccupancyGrid, map_topic, self.map_callback, 1)
         self.threshold = threshold
         self.height = height
         # Probably there's some way to get trimesh logs to point to ROS
@@ -21,7 +24,8 @@ class MapConverter(object):
         #trimesh.util.attach_to_log()
 
     def map_callback(self, map_msg):
-        rospy.loginfo("Received map")
+        #rospy.loginfo("Received map")
+        self.node.get_logger().info("Received map")
         map_dims = (map_msg.info.height, map_msg.info.width)
         map_array = np.array(map_msg.data).reshape(map_dims)
 
@@ -36,16 +40,18 @@ class MapConverter(object):
         mesh = trimesh.util.concatenate(meshes)
 
         # Export as STL or DAE
-        mesh_type = rospy.get_param("~mesh_type", "stl")
-        export_dir = rospy.get_param("~export_dir")
+        #mesh_type = rospy.get_param("~mesh_type", "stl")
+        mesh_type = self.node.declare_param("~mesh_type", "stl").value
+        #export_dir = rospy.get_param("~export_dir")
+        export_dir = self.node.declare_param("~export_dir").value
         if mesh_type == "stl":
             with open(export_dir + "/map.stl", 'w') as f:
                 mesh.export(f, "stl")
-            rospy.loginfo("Exported STL.  You can shut down this node now")
+            self.node.get_logger().info("Exported STL.  You can shut down this node now")
         elif mesh_type == "dae":
             with open(export_dir + "/map.dae", 'w') as f:
-                f.write(trimesh.exchange.dae.export_collada(mesh))
-            rospy.loginfo("Exported DAE.  You can shut down this node now")
+                f.write(trimesh.exchange.dae.export_collada(mesh).decode())
+            self.node.get_logger().info("Exported DAE.  You can shut down this node now")
 
     def publish_test_map(self, points, metadata, map_header):
         """
@@ -57,9 +63,10 @@ class MapConverter(object):
             test_map[y, x] = 100
         test_map_msg = OccupancyGrid()
         test_map_msg.header = map_header
-        test_map_msg.header.stamp = rospy.Time.now()
+        #test_map_msg.header.stamp = rospy.Time.now()
+        test_map_msg.header.stamp = self.node.get_clock().now().to_msg()
         test_map_msg.info = metadata
-        test_map_msg.data = list(np.ravel(test_map))
+        test_map_msg.data = list(map(int, np.ravel(test_map)))
         self.test_map_pub.publish(test_map_msg)
 
     def get_occupied_regions(self, map_array):
@@ -69,7 +76,7 @@ class MapConverter(object):
         map_array = map_array.astype(np.uint8)
         _, thresh_map = cv2.threshold(
                 map_array, self.threshold, 100, cv2.THRESH_BINARY)
-        image, contours, hierarchy = cv2.findContours(
+        contours, hierarchy = cv2.findContours(
                 thresh_map, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
         # Using cv2.RETR_CCOMP classifies external contours at top level of
         # hierarchy and interior contours at second level.  
@@ -108,7 +115,7 @@ class MapConverter(object):
                      [7, 3, 5]]
             mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
             if not mesh.is_volume:
-                rospy.logdebug("Fixing mesh normals")
+                self.node.get_logger().debug("Fixing mesh normals")
                 mesh.fix_normals()
             meshes.append(mesh)
         mesh = trimesh.util.concatenate(meshes)
@@ -126,12 +133,22 @@ def coords_to_loc(coords, metadata):
     # instead of assuming origin is at z=0 with no rotation wrt map frame
     return np.array([loc_x, loc_y, 0.0])
 
-if __name__ == "__main__":
-    rospy.init_node("map2gazebo")
-    map_topic = rospy.get_param("~map_topic", "map")
-    occupied_thresh = rospy.get_param("~occupied_thresh", 1)
-    box_height = rospy.get_param("~box_height", 2.0)
-    converter = MapConverter(map_topic,
+def main():
+    #rospy.init_node("map2gazebo")
+    rclpy.init(args=sys.argv)
+    node = rclpy.create_node("map2gazebo2")
+    #map_topic = rospy.get_param("~map_topic", "map")
+    map_topic = node.declare_parameter("~map_topic", "map").value
+    #occupied_thresh = rospy.get_param("~occupied_thresh", 1)
+    occupied_thresh = node.declare_parameter("~occupied_thresh", 1).value
+    #box_height = rospy.get_param("~box_height", 2.0)
+    box_height = node.declare_parameter("~box_height", 2.0).value
+
+    converter = MapConverter(node, map_topic,
             threshold=occupied_thresh, height=box_height)
-    rospy.loginfo("map2gazebo running")
-    rospy.spin()
+    
+    node.get_logger().info("map2gazebo running")
+    rclpy.spin(node)
+
+if __name__ == "__main__":
+    main()
