@@ -1,12 +1,14 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>map2gazebo2</name>
+  <name>map2gazebo</name>
   <version>0.0.0</version>
-  <description>The map2gazebo2 package for ros2</description>
+  <description>The map2gazebo package for ros2</description>
   <maintainer email="moritz.willmann@uni-ulm.de">Moritz Willmann</maintainer>
   <license>Apache License 2.0</license>
-
+  
+  <buildtool_depend>ament_python</buildtool_depend>
+  
   <depend>rclpy</depend>
   <depend>nav_msgs</depend>
 

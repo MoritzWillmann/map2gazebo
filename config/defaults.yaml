@@ -1,12 +1,9 @@
 # YAML config file with default parameters for map2gazebo
-
-# Topic that the map to convert is being published on
-map_topic: "map"
-# Can be "stl" or "dae"
-mesh_type: "stl"
-# Minimum threshold value for considering a map cell occupied
-occupied_thresh: 1
-# Height of boxes in gazebo environment
-box_height: 2.0
-
 # Don't specify export_dir in this file as the launchfile will override it.
+
+map2gazebo:
+  ros__parameters:
+    map_topic: "map" # Topic that the map to convert is being published on
+    mesh_type: "stl" # Can be "stl" or "dae"
+    occupied_thresh: 1 # Minimum threshold value for considering a map cell occupied
+    box_height: 2.0 # Height of boxes in gazebo environment
